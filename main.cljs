@@ -3,13 +3,11 @@
 (ns screencap
   (:require [planck.core :refer [slurp]]
             [planck.shell :refer [sh] :refer-macros [with-sh-dir]]
+            [cljs.reader]
             [goog.string.format]
             [cljs.js]))
 
-(def st (cljs.js/empty-state planck.core/init-empty-state))
-(defn- eval [str] ((cljs.js/eval-str st str nil {:eval cljs.js/js-eval :context :expr} identity) :value))
-
-(def config (eval (slurp "./config.edn")))
+(def config (cljs.reader/read-string (slurp "./config.edn")))
 
 (defn format
   "Formats a string using goog.string.format."
