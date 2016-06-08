@@ -30,8 +30,16 @@
 ;; TODO : issue following command at end of each hour
 ;; (sh "convert" "-set" "delay" "3" "-colorspace" "GRAY" "-colors" "256" "-dispose 1" "-loop" "0" "-scale" "50%" "*.png" filename)
 
+(defn user-active? []
+  (let [res (sh "osascript"
+                "-e" "tell application \"System Events\""
+                "-e" "get running of screen saver preferences"
+                "-e" "end tell")]
+  (and (= 0 (res :exit)) (= "false\n" (res :out)))))
+
 (loop [date (js/Date.)]
   (let [output-dir (ensure-output-dir-exists date)]
-    (capture-screen (format "%s/%02d_%02d_%02d" output-dir (.getHours date) (.getMinutes date) (.getSeconds date)))
+    (when (user-active?)
+      (capture-screen (format "%s/%02d_%02d_%02d" output-dir (.getHours date) (.getMinutes date) (.getSeconds date))))
     (recur (js/Date.))))
 
