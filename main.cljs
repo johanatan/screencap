@@ -37,9 +37,13 @@
                 "-e" "end tell")]
   (and (= 0 (res :exit)) (= "false\n" (res :out)))))
 
+(defn remove-duplicates [dir]
+  (sh "fdupes" "-d" "-N" dir))
+
 (loop [date (js/Date.)]
   (let [output-dir (ensure-output-dir-exists date)]
     (when (user-active?)
-      (capture-screen (format "%s/%02d_%02d_%02d" output-dir (.getHours date) (.getMinutes date) (.getSeconds date))))
+      (capture-screen (format "%s/%02d_%02d_%02d" output-dir (.getHours date) (.getMinutes date) (.getSeconds date)))
+      (remove-duplicates output-dir))
     (recur (js/Date.))))
 
