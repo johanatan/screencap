@@ -25,9 +25,6 @@
 (defn capture-screen [filename]
   (sh "screencapture" "-x" filename))
 
-;; TODO : issue following command at end of each hour
-;; (sh "convert" "-set" "delay" "3" "-colorspace" "GRAY" "-colors" "256" "-dispose 1" "-loop" "0" "-scale" "50%" "*.png" filename)
-
 (defn user-active? []
   (let [res (sh "osascript"
                 "-e" "tell application \"System Events\""
@@ -38,13 +35,19 @@
 (defn remove-duplicates [dir]
   (sh "fdupes" "-d" "-N" dir))
 
-(defn get-pngs [dir]
-  (filter #(.endsWith % ".png") (map :path (file-seq dir))))
+(defn get-files [dir extension]
+  (filter #(.endsWith % extension) (map :path (file-seq dir))))
 
 (defn get-date-sleep [start]
   (let [date (js/Date.)
         interval-millis (* 1000 (config :interval-seconds))]
     [date (if (= start 0) 0 (- interval-millis (max 0 (- (.getTime date) start))))]))
+
+(defn convert-to-gif [append? files output-file]
+  (let [options (if append? [] ["-set" "delay" "3" "-colorspace" "GRAY" "-colors"
+                                "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])
+        res (apply sh (concat ["convert"] options files [output-file]))]
+    (if (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
 
 (defn -main []
   (go
@@ -55,5 +58,10 @@
           (capture-screen (format "%s/%02d_%02d_%02d.png" output-dir
                                   (.getHours date) (.getMinutes date) (.getSeconds date))))
         (remove-duplicates output-dir)
-        #_(let [pngs (get-pngs output-dir)])
+        (let [pngs (get-files output-dir ".png")
+              gifs #(get-files output-dir ".gif")
+              tmp-gif (format "%s/video_%02d.gif" output-dir (+ 1 (count (gifs))))
+              final-gif (format "%s/video.gif" output-dir)]
+          (if (convert-to-gif false pngs tmp-gif)
+            (convert-to-gif true (gifs) final-gif)))
         (recur (get-date-sleep (.getTime date)))))))
