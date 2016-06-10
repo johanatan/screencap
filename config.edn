@@ -1,4 +1,5 @@
 
 {:output-dir "./output"
- :interval-seconds 5}
+ :encode-interval-millis 15000
+ :screenshot-interval-millis 5000}
 

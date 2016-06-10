@@ -4,6 +4,7 @@
             [planck.shell :refer [sh] :refer-macros [with-sh-dir]]
             [cljs.core.async :refer [<! chan]]
             [goog.string.format]
+            [clojure.string :refer [split join]]
             [cljs.reader]
             [cljs.js]))
 
@@ -32,15 +33,20 @@
                 "-e" "end tell")]
   (and (= 0 (res :exit)) (= "false\n" (res :out)))))
 
+(defn current-application []
+  ((sh "osascript"
+       "-e" "tell application \"System Events\""
+       "set appname to name of (first application process whose frontmost is true)"
+       "-e" "end tell") :out))
+
 (defn remove-duplicates [dir]
   (sh "fdupes" "-d" "-N" dir))
 
 (defn get-files [dir extension]
   (filter #(.endsWith % extension) (map :path (file-seq dir))))
 
-(defn get-date-sleep [start]
-  (let [date (js/Date.)
-        interval-millis (* 1000 (config :interval-seconds))]
+(defn get-date-sleep [start interval-millis]
+  (let [date (js/Date.)]
     [date (if (= start 0) 0 (- interval-millis (max 0 (- (.getTime date) start))))]))
 
 (defn convert-to-gif [append? files output-file]
@@ -49,19 +55,34 @@
         res (apply sh (concat ["convert"] options files [output-file]))]
     (if (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
 
-(defn -main []
+(defn run-loop [interval-millis callback]
   (go
-    (loop [[date sleep] (get-date-sleep 0)]
+    (loop [[date sleep] (get-date-sleep 0 interval-millis)]
       (<! (cljs.core.async/timeout sleep))
-      (let [output-dir (ensure-output-dir-exists date)]
-        (when (user-active?)
-          (capture-screen (format "%s/%02d_%02d_%02d.png" output-dir
-                                  (.getHours date) (.getMinutes date) (.getSeconds date))))
-        (remove-duplicates output-dir)
-        (let [pngs (get-files output-dir ".png")
-              gifs #(get-files output-dir ".gif")
-              tmp-gif (format "%s/video_%02d.gif" output-dir (+ 1 (count (gifs))))
-              final-gif (format "%s/video.gif" output-dir)]
-          (if (convert-to-gif false pngs tmp-gif)
-            (convert-to-gif true (gifs) final-gif)))
-        (recur (get-date-sleep (.getTime date)))))))
+      (callback date)
+      (recur (get-date-sleep (.getTime date) interval-millis)))))
+
+(defn encode-dir [dir date]
+  (println (format "Encoding directory: %s at %s" dir date))
+  (let [pngs (get-files dir ".png")
+        gifs #(get-files dir ".gif")
+        tmp-gif (format "%s/video_%02d.gif" dir (+ 1 (count (gifs))))
+        final-gif (format "%s/video.gif" dir)]
+    (if (convert-to-gif false pngs tmp-gif)
+      (convert-to-gif true (gifs) final-gif))))
+
+(defn -main []
+  (run-loop
+   (config :screenshot-interval-millis)
+   (fn [date]
+     (when (user-active?)
+       (let [output-dir (ensure-output-dir-exists date)]
+         (capture-screen (format "%s/%02d_%02d_%02d.png" output-dir
+                                 (.getHours date) (.getMinutes date) (.getSeconds date)))
+         (remove-duplicates output-dir)))))
+  (run-loop
+   (config :encode-interval-millis)
+   (fn [date]
+     (let [pngs (get-files (config :output-dir) ".png")
+           dirs (distinct (map (comp #(join "/" %) drop-last #(split % #"/")) pngs))]
+       (doseq [dir dirs] (encode-dir dir date))))))
