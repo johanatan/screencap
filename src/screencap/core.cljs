@@ -24,6 +24,7 @@
     dir))
 
 (defn capture-screen [filename]
+  (println (format "Taking screenshot: %s" filename))
   (sh "screencapture" "-x" filename))
 
 (defn user-active? []
@@ -45,22 +46,22 @@
 (defn get-files [dir extension]
   (filter #(.endsWith % extension) (map :path (file-seq dir))))
 
-(defn get-date-sleep [start interval-millis]
-  (let [date (js/Date.)]
-    [date (if (= start 0) 0 (- interval-millis (max 0 (- (.getTime date) start))))]))
-
 (defn convert-to-gif [append? files output-file]
   (let [options (if append? [] ["-set" "delay" "3" "-colorspace" "GRAY" "-colors"
                                 "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])
         res (apply sh (concat ["convert"] options files [output-file]))]
     (if (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
 
+(defn get-elapsed [block]
+  (let [start (.getTime (js/Date.)) _ (block)]
+    (max 0 (- (.getTime (js/Date.)) start))))
+
 (defn run-loop [interval-millis callback]
   (go
-    (loop [[date sleep] (get-date-sleep 0 interval-millis)]
+    (loop [sleep 0]
       (<! (cljs.core.async/timeout sleep))
-      (callback date)
-      (recur (get-date-sleep (.getTime date) interval-millis)))))
+      (let [elapsed (get-elapsed (fn [] (callback (js/Date.))))]
+        (recur (max 0 (- interval-millis elapsed)))))))
 
 (defn encode-dir [dir date]
   (println (format "Encoding directory: %s at %s" dir date))
