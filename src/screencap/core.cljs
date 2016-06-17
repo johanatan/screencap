@@ -27,12 +27,20 @@
   (println (format "Taking screenshot: %s" filename))
   (sh "screencapture" "-x" filename))
 
+(defn check-res [res]
+  (if (= 0 (res :exit)) (res :out)))
+
 (defn user-active? []
-  (let [res (sh "osascript"
-                "-e" "tell application \"System Events\""
-                "-e" "get running of screen saver preferences"
-                "-e" "end tell")]
-  (and (= 0 (res :exit)) (= "false\n" (res :out)))))
+  (and (= "false\n" (check-res
+                     (sh "osascript"
+                         "-e" "tell application \"System Events\""
+                         "-e" "get running of screen saver preferences"
+                         "-e" "end tell")))
+       (if-let [res (check-res (sh "ioreg" "-n" "IODisplayWrangler"))]
+         (= 4 ((js->clj (js/JSON.parse
+                         (clojure.string/replace
+                          (second (re-find #"IOPowerManagement.*({.*})" res)) "=" ":")))
+               "DevicePowerState")))))
 
 (defn current-application []
   ((sh "osascript"
@@ -77,9 +85,10 @@
    (config :screenshot-interval-millis)
    (fn [date]
      (when (user-active?)
-       (let [output-dir (ensure-output-dir-exists date)]
-         (capture-screen (format "%s/%02d_%02d_%02d.png" output-dir
-                                 (.getHours date) (.getMinutes date) (.getSeconds date)))
+       (let [output-dir (ensure-output-dir-exists date)
+             filename (format "%s/%02d_%02d_%02d" output-dir
+                              (.getHours date) (.getMinutes date) (.getSeconds date))]
+         (capture-screen (format "%s.png" filename))
          (remove-duplicates output-dir)))))
   (run-loop
    (config :encode-interval-millis)
