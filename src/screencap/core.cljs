@@ -16,7 +16,7 @@
   (apply goog.string/format fmt args))
 
 (defn get-date [date]
-  [(.getFullYear date) (.getMonth date) (.getDate date) (.getHours date)])
+  [(.getFullYear date) (+ 1 (.getMonth date)) (.getDate date) (.getHours date)])
 
 (defn ensure-output-dir-exists [date]
   (let [dir (apply format "%s/%s/%s/%s/%s" (concat [(config :output-dir)] (get-date date)))]
