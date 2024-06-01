@@ -1,14 +1,30 @@
 (ns screencap.core
   (:require-macros [cljs.core.async.macros :refer [go]])
-  (:require [planck.core :refer [slurp file-seq]]
-            [planck.shell :refer [sh] :refer-macros [with-sh-dir]]
-            [cljs.core.async :refer [<! chan]]
-            [goog.string.format]
-            [clojure.string :refer [split join]]
+  (:require [lumo.io :as io :refer [slurp]]
+            [lumo.util :as util :refer [file-seq]]
+            [cljs.core.async :refer [<!]]
+            [goog.string]
+            [clojure.string :as string :refer [ends-with? join split]]
+            [child_process :as child-process]
             [cljs.reader]
             [cljs.js]))
 
 (def config (cljs.reader/read-string (slurp "./config.edn")))
+
+(defn sh [cmd & args]
+  (let [command (str cmd " " (join " " args))]
+    (try
+      (let [result (.toString (.execSync child-process command {:encoding "utf8" :stdio "pipe"}))]
+        {:exit 0
+         :out result
+         :err ""})
+      (catch js/Error e
+       {:exit (.-status e)
+          :out ""
+          :err (.-message e)}))))
+
+(defn sq [v]
+  (str "'" v "'"))
 
 (defn format
   "Formats a string using goog.string.format."
@@ -28,37 +44,39 @@
   (sh "screencapture" "-x" filename))
 
 (defn check-res [res]
-  (if (= 0 (res :exit)) (res :out)))
+  (when (= 0 (res :exit)) (res :out)))
+
+(defn display-active? []
+  (= "on\n" (check-res (sh "pmset -g log | grep -E 'Display is turned (on|off)' | tail -n 1 | awk '{print $NF}'"))))
+
+(defn screen-saver-active? []
+  (= "true\n" (check-res
+                (sh "osascript"
+                    "-e" (sq "tell application \"System Events\"")
+                    "-e" (sq "set isRunning to (count of (every process whose name is \"ScreenSaverEngine\")) > 0")
+                    "-e" (sq "end tell")
+                    "-e" (sq "return isRunning")))))
 
 (defn user-active? []
-  (and (= "false\n" (check-res
-                     (sh "osascript"
-                         "-e" "tell application \"System Events\""
-                         "-e" "get running of screen saver preferences"
-                         "-e" "end tell")))
-       (if-let [res (check-res (sh "ioreg" "-n" "IODisplayWrangler"))]
-         (= 4 ((js->clj (js/JSON.parse
-                         (clojure.string/replace
-                          (second (re-find #"IOPowerManagement.*({.*})" res)) "=" ":")))
-               "DevicePowerState")))))
+  (and display-active? (not (screen-saver-active?))))
 
 (defn current-application []
   ((sh "osascript"
-       "-e" "tell application \"System Events\""
-       "set appname to name of (first application process whose frontmost is true)"
-       "-e" "end tell") :out))
+       "-e" (sq "tell application \"System Events\"")
+       "-e" (sq "set appname to name of (first application process whose frontmost is true)")
+       "-e" (sq "end tell")) :out))
 
 (defn remove-duplicates [dir]
   (sh "fdupes" "-d" "-N" dir))
 
 (defn get-files [dir extension]
-  (filter #(.endsWith % extension) (map :path (file-seq dir))))
+  (filter #(ends-with? %1 extension) (file-seq dir)))
 
 (defn convert-to-gif [append? files output-file]
   (let [options (if append? [] ["-set" "delay" "3" "-colorspace" "GRAY" "-colors"
                                 "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])
         res (apply sh (concat ["convert"] options files [output-file]))]
-    (if (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
+    (when (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
 
 (defn get-elapsed [block]
   (let [start (.getTime (js/Date.)) _ (block)]
@@ -77,7 +95,7 @@
         gifs #(get-files dir ".gif")
         tmp-gif (format "%s/video_%02d.gif" dir (+ 1 (count (gifs))))
         final-gif (format "%s/video.gif" dir)]
-    (if (convert-to-gif false pngs tmp-gif)
+    (when (convert-to-gif false pngs tmp-gif)
       (convert-to-gif true (gifs) final-gif))))
 
 (defn -main []
