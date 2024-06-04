@@ -1,5 +1,6 @@
 output/
-cache/
 supervise/
 .DS_Store
+node_modules/
+.lumo_cache/
 
