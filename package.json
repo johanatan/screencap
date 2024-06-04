@@ -1,0 +1,6 @@
+{
+    "name": "screencap",
+    "dependencies": {
+        "andare": "^1.1.587"
+    }
+}
