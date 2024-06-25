@@ -59,7 +59,7 @@
                     "-e" (sq "return isRunning")))))
 
 (defn user-active? []
-  (and display-active? (not (screen-saver-active?))))
+  (and (display-active?) (not (screen-saver-active?))))
 
 (defn current-application []
   ((sh "osascript"
@@ -108,6 +108,13 @@
 
 (defn -main [cmd & _]
   (case cmd
+    "display-checks"
+    (run-loop
+     1000
+     (fn [_]
+       (println (format "Display is: %s, screensaver is: %s"
+                        (if (display-active?) "on" "off")
+                        (if (screen-saver-active?) "on" "off")))))
     "screenshot"
     (run-loop
      (config :screenshot-interval-millis)
