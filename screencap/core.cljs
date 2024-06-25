@@ -1,13 +1,14 @@
 (ns screencap.core
   (:require-macros [cljs.core.async.macros :refer [go]])
-  (:require [lumo.io :as io :refer [slurp]]
-            [lumo.util :as util :refer [file-seq]]
-            [cljs.core.async :refer [<!]]
-            [goog.string]
-            [clojure.string :as string :refer [ends-with? join split]]
-            [child_process :as child-process]
-            [cljs.reader]
-            [cljs.js]))
+  (:require
+   [lumo.io :as io :refer [slurp]]
+   [lumo.util :as util :refer [file-seq]]
+   [cljs.core.async :refer [<!]]
+   [goog.string]
+   [clojure.string :as string :refer [ends-with? join split]]
+   [child_process :as child-process]
+   [cljs.reader]
+   [cljs.js]))
 
 (def config (cljs.reader/read-string (slurp "./config.edn")))
 
@@ -76,7 +77,7 @@
   (let [options (if append? [] ["-set" "delay" "3" "-colorspace" "GRAY" "-colors"
                                 "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])
         res (apply sh (concat ["convert"] options files [output-file]))]
-    (when (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= % output-file) files)) :exit)))))
+    (when (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= %1 output-file) files)) :exit)))))
 
 (defn get-elapsed [block]
   (let [start (.getTime (js/Date.)) _ (block)]
@@ -98,19 +99,28 @@
     (when (convert-to-gif false pngs tmp-gif)
       (convert-to-gif true (gifs) final-gif))))
 
-(defn -main []
-  (run-loop
-   (config :screenshot-interval-millis)
-   (fn [date]
-     (when (user-active?)
-       (let [output-dir (ensure-output-dir-exists date)
-             filename (format "%s/%02d_%02d_%02d" output-dir
-                              (.getHours date) (.getMinutes date) (.getSeconds date))]
-         (capture-screen (format "%s.png" filename))
-         (remove-duplicates output-dir)))))
-  (run-loop
-   (config :encode-interval-millis)
-   (fn [date]
-     (let [pngs (get-files (config :output-dir) ".png")
-           dirs (distinct (map (comp #(join "/" %) drop-last #(split % #"/")) pngs))]
-       (doseq [dir dirs] (encode-dir dir date))))))
+(defn encode-once [date]
+  (let [pngs (get-files (config :output-dir) ".png")
+        dirs (distinct (map (comp #(join "/" %) drop-last #(split % #"/")) pngs))]
+    (doseq [dir dirs]
+      (encode-dir dir date)
+      (remove-duplicates dir))))
+
+(defn -main [cmd & _]
+  (case cmd
+    "screenshot"
+    (run-loop
+     (config :screenshot-interval-millis)
+     (fn [date]
+       (when (user-active?)
+         (let [output-dir (ensure-output-dir-exists date)
+               filename (format "%s/%02d_%02d_%02d" output-dir
+                                (.getHours date) (.getMinutes date) (.getSeconds date))]
+           (capture-screen (format "%s.png" filename))
+           (remove-duplicates output-dir)))))
+    "encode-once"
+    (encode-once (js/Date.))
+    "encode"
+    (run-loop
+     (config :encode-interval-millis)
+     encode-once)))

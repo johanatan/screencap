@@ -1,8 +1,13 @@
- 
-.PHONY: run watch
+MAKEFLAGS += --silent
 
-run:
-	lumo -K -m screencap.core
+all: start_scripts
 
-watch:
-	./watch "make run" 60 
+start_scripts:
+	echo "Starting scripts with interleaved output..."
+	sh run.sh start
+
+stop_scripts:
+	echo "Stopping scripts..."
+	sh run.sh stop
+
+.PHONY: all start_scripts stop_scripts

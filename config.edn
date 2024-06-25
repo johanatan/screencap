@@ -1,5 +1,5 @@
 
 {:output-dir "./output"
- :encode-interval-millis 15000
- :screenshot-interval-millis 5000}
+ :encode-interval-millis 9010
+ :screenshot-interval-millis 4500}
 
