@@ -73,11 +73,30 @@
 (defn get-files [dir extension]
   (filter #(ends-with? %1 extension) (file-seq dir)))
 
+(defn chain-cmds [& cmds]
+  (reduce (fn [acc cmd]
+            (let [do-cmd #(if (:ignore-res? (meta cmd))
+                            (do (apply sh cmd)
+                                acc)
+                            (apply sh cmd))]
+              (cond (:always? (meta cmd))
+                    (do-cmd)
+                    (zero? (:exit acc))
+                    (do-cmd)
+                    :else
+                    acc))) {:exit 0} cmds))
+
 (defn convert-to-gif [append? files output-file]
   (let [options (if append? [] ["-set" "delay" "3" "-colorspace" "GRAY" "-colors"
-                                "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])
-        res (apply sh (concat ["convert"] options files [output-file]))]
-    (when (= 0 (res :exit)) (= 0 ((apply sh "rm" (remove #(= %1 output-file) files)) :exit)))))
+                                "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])]
+
+    (= 0 (:exit
+          (chain-cmds
+           (concat ["convert"] options files [output-file])
+           (with-meta
+             (concat ["rm"] (remove #(= %1 output-file) files))
+             {:always? true
+              :ignore-res? true}))))))
 
 (defn get-elapsed [block]
   (let [start (.getTime (js/Date.)) _ (block)]
