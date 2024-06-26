@@ -108,7 +108,7 @@
 
 (defn -main [cmd & _]
   (case cmd
-    "display-checks"
+    "check-display"
     (run-loop
      1000
      (fn [_]
