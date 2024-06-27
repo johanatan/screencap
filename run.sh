@@ -1,29 +1,49 @@
-#!/bin/sh
+#!/bin/bash
 
 LUMO="lumo -K -m screencap.core"
-PID1=run1.pid
-PID2=run2.pid
+PGID_FILE="process_group.pid"
 
-stop_scripts() {
-  kill `cat $PID1 $PID2 2>/dev/null` 2>/dev/null || true
-  rm -f $PID1 $PID2
+cleanup() {
+  echo "Cleaning up..."
   ($LUMO encode-once) | sed 's/^/[Run3] /'
-  echo "Scripts stopped and PID files removed."
+  rm -f "$PGID_FILE"
+  echo "Scripts stopped and process group terminated."
+}
+
+run_scripts() {
+  ($LUMO screenshot | sed 's/^/[Run1] /') &
+  ($LUMO encode | sed 's/^/[Run2] /') &
+  wait
+}
+
+start_scripts() {
+  # Ensure cleanup runs on script exit
+  trap cleanup EXIT
+
+  # Start a new process group using a subshell
+  (
+    # Save the PGID (which is the same as $$ in this subshell)
+    echo $$ > "$PGID_FILE"
+    # Set up a trap in the subshell to propagate the signal to the main script
+    trap 'kill -INT $$' INT TERM
+    echo "Scripts started. Process group ID: $$"
+    run_scripts
+  ) &
+  subshell_pid=$!
+
+  # Set up a trap for the main script
+  trap 'kill -TERM $subshell_pid 2>/dev/null; wait $subshell_pid 2>/dev/null; exit 0' INT TERM
+
+  # Wait for the subshell
+  wait $subshell_pid
 }
 
 case "$1" in
   start)
-    trap 'stop_scripts; exit 1' INT TERM EXIT
-    ($LUMO screenshot & echo $! > $PID1) | sed 's/^/[Run1] /' &
-    ($LUMO encode & echo $! > $PID2) | sed 's/^/[Run2] /' &
-    wait
-    stop_scripts
-    ;;
-  stop)
-    stop_scripts
+    start_scripts
     ;;
   *)
-    echo "Usage: $0 {start|stop}"
+    echo "Usage: $0 start"
     exit 1
     ;;
 esac
