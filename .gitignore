@@ -3,6 +3,4 @@ supervise/
 .DS_Store
 node_modules/
 .lumo_cache/
-run1.pid
-run2.pid
-
+process_group.pid

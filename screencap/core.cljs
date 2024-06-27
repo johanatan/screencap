@@ -87,8 +87,10 @@
                     acc))) {:exit 0} cmds))
 
 (defn convert-to-gif [append? files output-file]
-  (let [options (if append? [] ["-delay" "3" "-colorspace" "GRAY" "-colors"
-                                "256" "-dispose" "1" "-loop" "0" "-scale" "50%"])]
+  (let [options (if append?
+                  []
+                  ["-delay" "3" "-colorspace" "GRAY" "-colors" "256"
+                   "-dispose" "1" "-loop" "0" "-scale" "50%"])]
 
     (= 0 (:exit
           (chain-cmds
